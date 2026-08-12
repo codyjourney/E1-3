@@ -25,14 +25,11 @@ Cross/X 패턴을 판별하는 Mini NPU 시뮬레이터입니다.
 ```text
 mini_npu/
 ├── main.py
+├── main2.py
 ├── data.json
 └── README.md
 
 
-mini_npu/
-├── main.py
-├── data.json
-└── README.md
 ```
 
 ## 3. 실행 방법
