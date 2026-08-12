@@ -587,4 +587,4 @@ data.json 분석 모드에서는 각 테스트 케이스의 판정 결과와 PAS
 
 
 ## 참고
-https://chatgpt.com/c/6a7bdac6-b194-83ea-bb3f-d638b402f539
+https://chatgpt.com/share/6a7beb82-3104-83ea-8649-d73d1a243639
