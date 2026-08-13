@@ -23,7 +23,7 @@
 ## 2. 파일 구조
 
 ```text
-mini_npu/
+E1-3/
 ├── main.py
 ├── main2.py
 ├── data.json
