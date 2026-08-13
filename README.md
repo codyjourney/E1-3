@@ -27,17 +27,13 @@ E1-3/
 ├── main.py
 ├── data.json
 └── README.md
+└── screenshots/
+    ├── menu.png
+    ├── user_input1.png
+    ├── user_input2.png
+    ├── json_input1.png
+    └── json_input2.png
 ```
-
-### 파일 설명
-
-| 파일          | 설명                         |
-| ----------- | -------------------------- |
-| `main.py`   | NPU Simulator 메인 프로그램 |
-| `data.json` | 패턴 및 필터 테스트 데이터            |
-| `README.md` | 프로젝트 설명 및 결과 분석            |
-
----
 
 ## 3. 실행 방법
 
@@ -1091,22 +1087,6 @@ main()
 
 ---
 
-# 4. 파일 구성
-
-기본적으로 다음과 같은 구조로 사용할 수 있다.
-
-```text
-E1-3/
-├── main.py
-├── data.json
-└── README.md
-```
-
-- `main.py`: NPU Simulator 프로그램
-- `data.json`: 자동 분석에 사용할 패턴과 필터 데이터
-- `README.md`: 프로젝트 설명 및 실행 방법
-
----
 
 # 5. Python 기본 라이브러리 import
 

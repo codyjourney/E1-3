@@ -1872,7 +1872,7 @@ def run_json_mode(
 #
 # 프로그램을 실행하면
 #
-#     Mini NPU Simulator
+#     NPU Simulator
 #
 #     [모드 선택]
 #     1. 사용자 입력 (3x3)
@@ -1892,7 +1892,7 @@ def print_title() -> None:
     """
 
     print("\n=======================================")
-    print("        Mini NPU Simulator")
+    print("        NPU Simulator")
     print("=======================================")
 
 
