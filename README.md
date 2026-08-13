@@ -3624,7 +3624,7 @@ classify_scores()
 
 # 44. 프로그램 실행 방법
 
-Python 3.8 이상 환경에서 실행할 수 있다.
+Python 3.12 이상 환경에서 실행할 수 있다.
 
 ```bash
 python main.py
