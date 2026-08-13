@@ -804,7 +804,7 @@ def run_json_mode(json_path: str = "data.json") -> None:
 
 def print_title() -> None:
     print("\n=======================================")
-    print("        Mini NPU Simulator")
+    print("        NPU Simulator")
     print("=======================================")
 
 

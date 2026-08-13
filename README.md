@@ -421,7 +421,7 @@ X > Cross
 
 ```text
 =======================================
-Mini NPU Simulator
+NPU Simulator
 =======================================
 
 [모드 선택]
@@ -782,7 +782,7 @@ Cross / X 비교
 프로그램을 실행하면 먼저 모드를 선택합니다.
 
 ```text
-=== Mini NPU Simulator ===
+=== NPU Simulator ===
 
 1. 사용자 입력 (3x3)
 2. data.json 분석
@@ -894,20 +894,15 @@ PASS / FAIL
 # 21. 프로젝트 구성
 
 ```text
-project/
+E1-3/
 ├── main.py
-├── main2.py
 ├── data.json
 └── README.md
 ```
 
 ### `main.py`
 
-Mini NPU Simulator의 메인 프로그램입니다.
-
-### `main2.py`
-
-추가적인 실행 및 테스트를 위한 보조 프로그램입니다.
+NPU Simulator의 메인 프로그램입니다.
 
 ### `data.json`
 
@@ -944,7 +939,7 @@ for i in range(size):
 
 # 23. 한 문장으로 정리
 
-> **Mini NPU Simulator는 숫자 배열로 표현된 패턴과 필터를 MAC 연산으로 비교하여 Cross와 X를 판별하고, 데이터 크기가 증가할 때 AI 연산량과 처리 시간이 어떻게 증가하는지를 직접 구현하고 실험해 보는 교육용 Mini NPU 시뮬레이터이다.**
+> **NPU Simulator는 숫자 배열로 표현된 패턴과 필터를 MAC 연산으로 비교하여 Cross와 X를 판별하고, 데이터 크기가 증가할 때 AI 연산량과 처리 시간이 어떻게 증가하는지를 직접 구현하고 실험해 보는 교육용 NPU 시뮬레이터이다.**
 
 ---
 
@@ -985,11 +980,11 @@ Cross / X 비교
 
 ## 25. 설명
 
-# Mini NPU Simulator
+# NPU Simulator
 
 ## 1. 프로젝트 소개
 
-이 프로젝트는 AI 연산에서 중요한 기본 연산 중 하나인 **MAC(Multiply-Accumulate)** 연산을 Python으로 직접 구현한 **Mini NPU Simulator**이다.
+이 프로젝트는 AI 연산에서 중요한 기본 연산 중 하나인 **MAC(Multiply-Accumulate)** 연산을 Python으로 직접 구현한 **NPU Simulator**이다.
 
 NPU(Neural Processing Unit)는 인공지능 연산을 빠르게 처리하기 위한 프로세서이며, 특히 행렬 연산과 MAC 연산을 매우 빠르게 수행하도록 설계된다.
 
@@ -1103,13 +1098,13 @@ main()
 기본적으로 다음과 같은 구조로 사용할 수 있다.
 
 ```text
-mini-npu-simulator/
+E1-3/
 ├── main.py
 ├── data.json
 └── README.md
 ```
 
-- `main.py`: Mini NPU Simulator 프로그램
+- `main.py`: NPU Simulator 프로그램
 - `data.json`: 자동 분석에 사용할 패턴과 필터 데이터
 - `README.md`: 프로젝트 설명 및 실행 방법
 
@@ -2919,7 +2914,7 @@ def print_title() -> None:
 
 ```text
 =======================================
-        Mini NPU Simulator
+        NPU Simulator
 =======================================
 ```
 
@@ -3090,7 +3085,7 @@ if __name__ == "__main__":
 즉:
 
 ```python
-class MiniNPU:
+class NPU:
     ...
 ```
 
@@ -3639,7 +3634,7 @@ python main.py
 
 ```text
 =======================================
-        Mini NPU Simulator
+        NPU Simulator
 =======================================
 
 [모드 선택]
@@ -4212,7 +4207,7 @@ run_performance_analysis()
 
 # 56. 한 문장으로 이해하기
 
-> **Mini NPU Simulator는 Python 반복문으로 MAC 연산을 직접 구현하고, Pattern과 Cross/X Filter의 유사도를 계산하여 패턴을 분류한 뒤, JSON 기반 자동 검증과 행렬 크기별 성능 측정까지 수행하는 프로그램이다.**
+> **NPU Simulator는 Python 반복문으로 MAC 연산을 직접 구현하고, Pattern과 Cross/X Filter의 유사도를 계산하여 패턴을 분류한 뒤, JSON 기반 자동 검증과 행렬 크기별 성능 측정까지 수행하는 프로그램이다.**
 
 
 ## 참고
