@@ -63,7 +63,7 @@ from typing import Any, Dict, List, Optional, Tuple
 # 개발 조건
 # ------------------------------------------------------------
 #
-# - Python 3.8+
+# - Python 3.12+
 # - 외부 라이브러리 사용 금지
 # - NumPy 사용 금지
 # - MAC 연산은 직접 반복문으로 구현

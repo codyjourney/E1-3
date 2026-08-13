@@ -1,6 +1,6 @@
 # NPU Simulator
 
-3×3부터 25×25까지의 패턴과 필터를 이용하여 **MAC(Multiply-Accumulate) 연산을 직접 구현**하고, **Cross/X 패턴을 판별**하는 Mini NPU 시뮬레이터입니다.
+3×3부터 25×25까지의 패턴과 필터를 이용하여 **MAC(Multiply-Accumulate) 연산을 직접 구현**하고, **Cross/X 패턴을 판별**하는 NPU 시뮬레이터입니다.
 
 외부 라이브러리를 사용하지 않고 **Python 표준 라이브러리만 사용**하여 구현했습니다.
 
@@ -34,7 +34,7 @@ E1-3/
 
 | 파일          | 설명                         |
 | ----------- | -------------------------- |
-| `main.py`   | Mini NPU Simulator 메인 프로그램 |
+| `main.py`   | NPU Simulator 메인 프로그램 |
 | `main2.py`  | 추가/보조 실행 프로그램              |
 | `data.json` | 패턴 및 필터 테스트 데이터            |
 | `README.md` | 프로젝트 설명 및 결과 분석            |
@@ -63,7 +63,7 @@ python main.py
 
 ## 4.1 프로젝트 개요
 
-이 프로젝트는 AI 반도체에서 사용되는 **MAC(Multiply-Accumulate) 연산의 원리**를 직접 Python으로 구현하고 실험해 보는 미니 NPU 시뮬레이터입니다.
+이 프로젝트는 AI 반도체에서 사용되는 **MAC(Multiply-Accumulate) 연산의 원리**를 직접 Python으로 구현하고 실험해 보는 NPU 시뮬레이터입니다.
 
 컴퓨터는 사람처럼 그림을 보고 직관적으로 `"십자가"` 또는 `"X"`라고 판단하지 않습니다.
 
