@@ -6,8 +6,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 # ============================================================
-# Mini NPU Simulator
-# Python 3.8+
+# NPU Simulator
+# Python 3.12+
 # External libraries: None
 # ============================================================
 

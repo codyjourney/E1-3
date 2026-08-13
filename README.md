@@ -1,4 +1,4 @@
-# Mini NPU Simulator
+# NPU Simulator
 
 3×3부터 25×25까지의 패턴과 필터를 이용하여 **MAC(Multiply-Accumulate) 연산을 직접 구현**하고, **Cross/X 패턴을 판별**하는 Mini NPU 시뮬레이터입니다.
 

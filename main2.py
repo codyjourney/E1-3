@@ -6,12 +6,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 # ============================================================
-# Mini NPU Simulator
+# NPU Simulator
 # ============================================================
 #
 # 이 프로그램은 AI에서 중요한 연산 중 하나인
 # MAC(Multiply-Accumulate)을 직접 구현해 보는
-# "Mini NPU Simulator"입니다.
+# "NPU Simulator"입니다.
 #
 # ------------------------------------------------------------
 # MAC이란?
