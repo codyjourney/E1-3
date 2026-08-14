@@ -4186,7 +4186,3 @@ run_performance_analysis()
 # 56. 한 문장으로 이해하기
 
 > **NPU Simulator는 Python 반복문으로 MAC 연산을 직접 구현하고, Pattern과 Cross/X Filter의 유사도를 계산하여 패턴을 분류한 뒤, JSON 기반 자동 검증과 행렬 크기별 성능 측정까지 수행하는 프로그램이다.**
-
-
-## 참고
-https://chatgpt.com/share/6a7beb82-3104-83ea-8649-d73d1a243639
