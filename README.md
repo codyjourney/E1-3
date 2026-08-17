@@ -4363,44 +4363,6 @@ MAC 점수
 
 
 
-## 흐름
-
-```text
-main()
- │
- ├─ 1번 선택 → run_user_mode()
- │                │
- │                ├─ read_matrix_from_console() × 3
- │                │      ├─ 필터 A
- │                │      ├─ 필터 B
- │                │      └─ 패턴
- │                │
- │                ├─ mac_score() × 2
- │                │      ├─ 패턴 × 필터 A
- │                │      └─ 패턴 × 필터 B
- │                │
- │                ├─ classify_scores()
- │                │
- │                └─ run_performance_analysis()
- │
- └─ 2번 선택 → run_json_mode()
-                  │
-                  ├─ load_json_file()
-                  │
-                  ├─ validate_filter_group()
-                  │
-                  ├─ analyze_pattern_case() × 여러 패턴
-                  │      │
-                  │      ├─ extract_size_from_pattern_key()
-                  │      ├─ normalize_label()
-                  │      ├─ validate_square_matrix()
-                  │      ├─ validate_filter_group()
-                  │      ├─ mac_score() × 2
-                  │      └─ classify_scores()
-                  │
-                  └─ run_performance_analysis()
-```
-
 
 ## 동점 판정
 
@@ -4724,3 +4686,67 @@ def measure_mac(
 라는 뜻이다.
 
 **타입 힌트는 타입을 강제하는 기능이 아니라, 코드의 타입 정보를 명확하게 표시하고 IDE나 `mypy`, `pyright` 같은 정적 검사 도구가 오류를 찾을 수 있도록 도와주는 기능이다.**
+
+
+
+## 흐름
+
+### 모드 1
+
+```text
+main()
+ └─ run_user_mode()
+     ├─ read_matrix_from_console() → 필터 A
+     │   └─ validate_square_matrix()
+     │       └─ matrix_size()
+     │           └─ is_matrix()
+     │   
+     ├─ read_matrix_from_console() → 필터 B
+     ├─ read_matrix_from_console() → 패턴
+     ├─ mac_score() → A 점수
+     ├─ mac_score() → B 점수
+     ├─ measure_mac()
+     │   └─ mac_score()
+     ├─ classify_scores() → A/B/UNDECIDED
+     └─ run_performance_analysis()
+         ├─ create_performance_pattern()
+         ├─ create_cross_filter()
+         ├─ create_x_filter()
+         └─ measure_mac()
+             └─ mac_score()
+```
+
+
+### 모드 2
+
+```text
+main()
+ └─ run_json_mode()
+     ├─ load_json_file()
+     ├─ validate_filter_group()
+     │   ├─ normalize_label()
+     │   ├─ validate_square_matrix()
+     │   │   ├─ matrix_size()
+     │   │   │   └─ is_matrix()
+     │   └─ to_float_matrix()
+     │
+     ├─ analyze_pattern_case()
+     │   ├─ extract_size_from_pattern_key()
+     │   ├─ normalize_label()
+     │   ├─ validate_square_matrix()
+     │   │   ├─ matrix_size()
+     │   │   │   └─ is_matrix()
+     │   ├─ to_float_matrix()
+     │   ├─ validate_filter_group()
+     │   ├─ mac_score()
+     │   └─ classify_scores()
+     │
+     └─ run_performance_analysis()
+         ├─ create_performance_pattern()
+         ├─ create_cross_filter()
+         ├─ create_x_filter()
+         └─ measure_mac()
+             └─ mac_score()
+     
+
+```
