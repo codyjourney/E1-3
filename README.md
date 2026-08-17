@@ -4707,6 +4707,7 @@ main()
      ├─ mac_score() → B 점수
      ├─ measure_mac()
      │   └─ mac_score()
+     │
      ├─ classify_scores() → A/B/UNDECIDED
      └─ run_performance_analysis()
          ├─ create_performance_pattern()
