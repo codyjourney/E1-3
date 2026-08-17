@@ -4588,3 +4588,139 @@ FAIL
 특히 현재 코드에서는 `expected`가 `Cross` 또는 `X`만 될 수 있으므로,
 
 > **JSON Mode에서 `UNDECIDED`는 항상 FAIL입니다.**
+
+
+
+## 타입 힌트
+
+# `measure_mac()` 타입 힌트 정리
+
+```python
+def measure_mac(
+    pattern: List[List[float]],
+    filter_matrix: List[List[float]],
+    repeats: int = PERFORMANCE_REPEATS
+) -> Tuple[float, float]:
+```
+
+## 1. 각 부분의 의미
+
+| 코드 | 의미 |
+|---|---|
+| `pattern: List[List[float]]` | `pattern`은 `float`로 이루어진 2차원 리스트라는 의미 |
+| `filter_matrix: List[List[float]]` | `filter_matrix`도 `float` 2차원 리스트라는 의미 |
+| `repeats: int` | `repeats`는 정수라는 의미 |
+| `= PERFORMANCE_REPEATS` | `repeats`를 생략하면 기본값 `PERFORMANCE_REPEATS` 사용 |
+| `-> Tuple[float, float]` | 반환값이 `float` 2개로 이루어진 튜플이라는 의미 |
+
+즉, 전체적으로:
+
+> **입력 데이터의 예상 타입과 반환값의 예상 타입을 알려주는 타입 힌트(type hint)이다.**
+
+---
+
+## 2. 중요한 점
+
+타입 힌트는 **실제 타입을 강제로 검사하지 않는다.**
+
+예를 들어:
+
+```python
+def add(a: int, b: int) -> int:
+    return a + b
+```
+
+라고 해도:
+
+```python
+add("hello", "world")
+```
+
+를 Python이 타입 힌트 때문에 바로 막지는 않는다.
+
+실제로 실행하면 문자열끼리 `+`가 가능하므로:
+
+```text
+helloworld
+```
+
+가 반환된다.
+
+---
+
+## 3. 타입이 잘못되면?
+
+타입 힌트가 잘못되었다고 해서 반드시 즉시 오류가 발생하는 것은 아니다.
+
+```text
+타입이 잘못됨
+    ↓
+Python은 일단 실행
+    ↓
+실제 연산에서 문제가 발생하면
+    ↓
+TypeError 등의 오류 발생
+```
+
+예를 들어:
+
+```python
+measure_mac(pattern, filter_matrix, "10")
+```
+
+처럼 `repeats`에 문자열을 넣으면,
+
+```python
+for _ in range(repeats):
+```
+
+에서 `range("10")`이 실행되므로 `TypeError`가 발생한다.
+
+---
+
+## 4. `-> Tuple[float, float]`의 의미
+
+```python
+-> Tuple[float, float]
+```
+
+은 다음과 같은 반환값을 예상한다는 의미이다.
+
+```python
+(0.012345, 2.0)
+```
+
+즉:
+
+```text
+첫 번째 값 → float
+두 번째 값 → float
+```
+
+현재 코드에서는:
+
+```python
+return average_ms, last_score
+```
+
+이므로 정확히 `(평균 실행 시간, MAC 결과)`를 반환한다.
+
+---
+
+## 5. 한 줄 요약
+
+```python
+def measure_mac(
+    pattern: List[List[float]],
+    filter_matrix: List[List[float]],
+    repeats: int = PERFORMANCE_REPEATS
+) -> Tuple[float, float]:
+```
+
+는
+
+> **"2차원 float 리스트인 패턴과 필터, 정수인 반복 횟수를 받아서 float 2개짜리 튜플을 반환할 것으로 예상한다."**
+
+라는 뜻이다.
+
+**타입 힌트는 타입을 강제하는 기능이 아니라, 코드의 타입 정보를 명확하게 표시하고 IDE나 `mypy`, `pyright` 같은 정적 검사 도구가 오류를 찾을 수 있도록 도와주는 기능이다.**
