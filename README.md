@@ -4724,6 +4724,7 @@ main()
 main()
  └─ run_json_mode()
      ├─ load_json_file()
+     │
      ├─ validate_filter_group()
      │   ├─ normalize_label()
      │   ├─ validate_square_matrix()
