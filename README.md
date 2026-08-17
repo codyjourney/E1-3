@@ -4401,3 +4401,190 @@ main()
                   └─ run_performance_analysis()
 ```
 
+
+## 동점 판정
+
+# User Mode와 JSON Mode의 동점 처리 기준 차이
+
+코드상으로는 **User Mode와 JSON Mode의 동점 처리 기준에 차이가 없습니다.**
+
+둘 다 동일하게 `classify_scores()` 함수를 사용합니다.
+
+## 1. 공통 동점 기준
+
+```python
+EPSILON = 1e-9
+```
+
+두 점수의 차이가 다음 조건을 만족하면 동점으로 처리합니다.
+
+```python
+abs(cross_score - x_score) < EPSILON
+```
+
+즉,
+
+```text
+|Cross 점수 - X 점수| < 1e-9
+```
+
+이면 `UNDECIDED`가 됩니다.
+
+예:
+
+```text
+Cross = 5.0000000000
+X     = 5.0000000005
+
+차이 = 0.0000000005
+     < 1e-9
+
+→ UNDECIDED
+```
+
+---
+
+## 2. User Mode의 동점 처리
+
+User Mode에서는 다음 순서로 처리됩니다.
+
+```text
+mac_score()
+    ↓
+Cross 점수 / X 점수 계산
+    ↓
+classify_scores()
+    ↓
+UNDECIDED
+    ↓
+"판정 불가" 출력
+```
+
+코드에서는:
+
+```python
+result = classify_scores(
+    score_a,
+    score_b,
+    EPSILON
+)
+```
+
+동점이면:
+
+```python
+if result == "UNDECIDED":
+    print(
+        f"판정: 판정 불가 "
+        f"(|A-B| < {EPSILON})"
+    )
+```
+
+즉, **User Mode에서는 동점이면 단순히 `판정 불가`를 출력합니다.**
+
+---
+
+## 3. JSON Mode의 동점 처리
+
+JSON Mode 역시 동일한 `classify_scores()`를 사용합니다.
+
+```text
+mac_score()
+    ↓
+Cross 점수 / X 점수 계산
+    ↓
+classify_scores()
+    ↓
+UNDECIDED
+    ↓
+expected와 비교
+    ↓
+expected = Cross 또는 X
+    ↓
+UNDECIDED ≠ expected
+    ↓
+FAIL
+```
+
+코드에서는:
+
+```python
+prediction = classify_scores(
+    cross_score,
+    x_score,
+    EPSILON
+)
+```
+
+그 다음 `expected`와 비교합니다.
+
+```python
+if prediction == expected:
+    result["status"] = "PASS"
+else:
+    result["status"] = "FAIL"
+```
+
+따라서 JSON의 `expected`가 `Cross` 또는 `X`인 경우:
+
+```text
+prediction = UNDECIDED
+expected   = Cross 또는 X
+
+→ 서로 다름
+→ FAIL
+```
+
+이 됩니다.
+
+---
+
+## 4. User Mode와 JSON Mode 비교
+
+| 항목 | User Mode | JSON Mode |
+|---|---|---|
+| `EPSILON` | `1e-9` | `1e-9` |
+| 동점 조건 | `|Cross-X| < 1e-9` | `|Cross-X| < 1e-9` |
+| 동점 결과 | `UNDECIDED` | `UNDECIDED` |
+| 동점 이후 처리 | `판정 불가` 출력 | `expected`와 비교 |
+| 최종 결과 | 판정 불가 | 일반적으로 `FAIL` |
+
+---
+
+## 5. 핵심 차이
+
+**동점 판정 기준 자체는 완전히 동일합니다.**
+
+### User Mode
+
+```text
+동점
+ ↓
+UNDECIDED
+ ↓
+판정 불가
+```
+
+### JSON Mode
+
+```text
+동점
+ ↓
+UNDECIDED
+ ↓
+expected와 비교
+ ↓
+UNDECIDED ≠ Cross/X
+ ↓
+FAIL
+```
+
+따라서 정확하게 표현하면:
+
+> **User Mode와 JSON Mode는 동점 기준은 동일하지만, 동점 이후의 처리 방식이 다릅니다.**
+>
+> User Mode는 `UNDECIDED`를 사용자에게 **판정 불가**로 보여주고, JSON Mode는 `expected`와 비교하여 **PASS/FAIL을 결정**합니다.
+
+특히 현재 코드에서는 `expected`가 `Cross` 또는 `X`만 될 수 있으므로,
+
+> **JSON Mode에서 `UNDECIDED`는 항상 FAIL입니다.**
