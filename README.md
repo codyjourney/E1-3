@@ -4360,3 +4360,44 @@ MAC 점수
 실제 NPU에서는 많은 MAC 연산을 동시에 수행할 수 있도록 병렬 연산 유닛을 사용하고, 메모리 접근을 효율적으로 관리하기 위한 블록화 및 메모리 계층 구조를 함께 사용합니다.
 
 따라서 이 프로젝트에서는 현재 코드를 유지하면서도 **N=1000 이상의 대형 행렬에서는 시간과 메모리가 주요 병목이 될 수 있으며, 우선적으로 블록화/타일링과 스트리밍을 고려하고 이후 메모리 레이아웃 개선 및 병렬화를 적용할 수 있다**고 정리할 수 있습니다.
+
+
+
+## 흐름
+
+```text
+main()
+ │
+ ├─ 1번 선택 → run_user_mode()
+ │                │
+ │                ├─ read_matrix_from_console() × 3
+ │                │      ├─ 필터 A
+ │                │      ├─ 필터 B
+ │                │      └─ 패턴
+ │                │
+ │                ├─ mac_score() × 2
+ │                │      ├─ 패턴 × 필터 A
+ │                │      └─ 패턴 × 필터 B
+ │                │
+ │                ├─ classify_scores()
+ │                │
+ │                └─ run_performance_analysis()
+ │
+ └─ 2번 선택 → run_json_mode()
+                  │
+                  ├─ load_json_file()
+                  │
+                  ├─ validate_filter_group()
+                  │
+                  ├─ analyze_pattern_case() × 여러 패턴
+                  │      │
+                  │      ├─ extract_size_from_pattern_key()
+                  │      ├─ normalize_label()
+                  │      ├─ validate_square_matrix()
+                  │      ├─ validate_filter_group()
+                  │      ├─ mac_score() × 2
+                  │      └─ classify_scores()
+                  │
+                  └─ run_performance_analysis()
+```
+
