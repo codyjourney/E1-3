@@ -2,7 +2,6 @@ import json
 import os
 import re
 import time
-
 from typing import Any, Dict, List, Optional, Tuple
 
 
@@ -10,89 +9,37 @@ from typing import Any, Dict, List, Optional, Tuple
 # NPU Simulator
 # ============================================================
 #
-# 이 프로그램은 실제 NPU(Neural Processing Unit)의 연산을
-# 아주 간단한 형태로 흉내 내는 시뮬레이터입니다.
+# 이 프로그램은 NPU(Neural Processing Unit)의 기본 연산을
+# 아주 간단하게 흉내 내는 시뮬레이터입니다.
 #
-# ------------------------------------------------------------
-# 핵심 개념: MAC
-# ------------------------------------------------------------
+# 핵심 연산은 MAC입니다.
 #
 # MAC = Multiply-Accumulate
+#     = 각각의 값을 곱하고 모두 더하는 연산
 #
-# 즉,
+# 예를 들어,
 #
-#   1. 같은 위치의 두 숫자를 곱하고(Multiply)
-#   2. 그 결과를 계속 더하는(Accumulate)
-#   연산입니다.
-#
-# 예를 들어 2x2 패턴이 다음과 같다고 가정합니다.
-#
-# 패턴
+# 패턴:
 #   1 2
 #   3 4
 #
-# 필터
+# 필터:
 #   1 0
 #   0 1
 #
-# 그러면 MAC은 다음과 같이 계산됩니다.
+# MAC 결과:
+#   1×1 + 2×0 + 3×0 + 4×1
+#   = 1 + 4
+#   = 5
 #
-#   (1 × 1) + (2 × 0) + (3 × 0) + (4 × 1)
+# 이 프로그램에서는
+#   Cross(+) 모양 필터
+#   X 모양 필터
 #
-# = 1 + 0 + 0 + 4
+# 두 개를 사용하여 어떤 모양에 더 가까운지 판정합니다.
 #
-# = 5
-#
-# ------------------------------------------------------------
-# 이 프로그램에서 사용하는 필터
-# ------------------------------------------------------------
-#
-# Cross 필터:
-#
-#       0 1 0
-#       1 1 1
-#       0 1 0
-#
-# 가운데 + 모양을 강조합니다.
-#
-#
-# X 필터:
-#
-#       1 0 1
-#       0 1 0
-#       1 0 1
-#
-# 대각선 X 모양을 강조합니다.
-#
-#
-# 실제 입력 패턴에 Cross 필터와 X 필터를 각각 적용한 뒤
-# MAC 점수를 비교합니다.
-#
-# Cross 점수가 더 높으면 → Cross
-# X 점수가 더 높으면     → X
-# 두 점수가 거의 같으면  → UNDECIDED
-#
-# ------------------------------------------------------------
-# 프로그램에서 지원하는 두 가지 모드
-# ------------------------------------------------------------
-#
-# 1. 사용자 입력 모드
-#    - 3x3 필터 A
-#    - 3x3 필터 B
-#    - 3x3 패턴
-#    을 직접 입력합니다.
-#
-# 2. JSON 분석 모드
-#    - data.json에 저장된 필터와 패턴을 읽습니다.
-#    - 여러 크기의 패턴을 자동으로 분석합니다.
-#
-# JSON 모드에서는 다음 크기를 지원합니다.
-#
-#    5x5
-#    13x13
-#    25x25
-#
-# 또한 각 패턴에 대해 MAC 실행 시간도 측정합니다.
+# 또한 JSON에 저장된 실제 패턴을 사용하여
+# MAC 연산에 걸리는 시간도 측정합니다.
 #
 # ============================================================
 
@@ -101,57 +48,37 @@ from typing import Any, Dict, List, Optional, Tuple
 # 프로그램 기본 설정
 # ============================================================
 
-# ------------------------------------------------------------
-# EPSILON
-# ------------------------------------------------------------
+# 두 점수가 이 값보다 작게 차이나면
+# 사실상 같은 점수라고 판단합니다.
 #
-# 컴퓨터에서 실수(float)를 비교할 때는 아주 작은 오차가
-# 발생할 수 있습니다.
+# 예:
+#   Cross = 10.000000000
+#   X     = 10.0000000005
 #
-# 예를 들어 사람이 보기에는
-#
-#   10.0 == 10.0
-#
-# 이더라도 계산 과정에서
-#
-#   10.0000000001
-#   10.0000000000
-#
-# 처럼 아주 작은 차이가 생길 수 있습니다.
-#
-# 따라서 두 점수의 차이가 EPSILON보다 작으면
-# 사실상 같은 값이라고 판단합니다.
-#
-# 여기서는 1e-9를 사용합니다.
-#
+# 차이가 EPSILON보다 작으면 "UNDECIDED"가 됩니다.
 EPSILON = 1e-9
 
 
-# 최소 필터 크기입니다.
+# 필터의 최소 크기입니다.
 #
-# Cross와 X 모양은 중앙 위치가 필요하기 때문에
-# 최소 3x3 크기를 사용합니다.
-#
+# Cross나 X 모양을 만들려면 가운데가 필요하기 때문에
+# 최소 3×3 크기를 사용합니다.
 MIN_SIZE = 3
 
 
-# JSON에서 지원하는 행렬 크기입니다.
+# JSON 모드에서 허용하는 행렬 크기입니다.
 #
 # 예:
-#   size_5_0
-#   size_13_0
-#   size_25_0
-#
+#   size_5_0   → 5×5
+#   size_13_0  → 13×13
+#   size_25_0  → 25×25
 SUPPORTED_JSON_SIZES = (5, 13, 25)
 
 
-# 성능 측정을 몇 번 반복할 것인지 지정합니다.
+# 성능 측정을 몇 번 반복할지 결정합니다.
 #
-# 한 번만 측정하면 순간적인 CPU 상태 등의 영향을
-# 많이 받을 수 있습니다.
-#
-# 따라서 같은 연산을 10번 실행하고 평균을 계산합니다.
-#
+# 한 번만 측정하면 컴퓨터 상태에 따라 시간이 크게 달라질 수 있으므로
+# 여러 번 측정한 뒤 평균을 사용합니다.
 PERFORMANCE_REPEATS = 10
 
 
@@ -161,88 +88,36 @@ PERFORMANCE_REPEATS = 10
 
 def normalize_label(label: Any) -> Optional[str]:
     """
-    입력된 라벨을 프로그램에서 사용하는 표준 이름으로
-    변환합니다.
+    JSON 등에 저장된 다양한 형태의 라벨을
+    프로그램에서 사용할 하나의 표준 이름으로 바꿉니다.
 
-    --------------------------------------------------------
-    입력 예시
-    --------------------------------------------------------
+    예:
+        "+"     → "Cross"
+        "cross" → "Cross"
+        "Cross" → "Cross"
 
-    "+"
-    "cross"
-    "Cross"
+        "x"     → "X"
+        "X"     → "X"
 
-    위 값들은 모두
-
-        "Cross"
-
-    로 변환됩니다.
-
-
-    "x"
-    "X"
-
-    위 값들은 모두
-
-        "X"
-
-    로 변환됩니다.
-
-
-    --------------------------------------------------------
-    반환값
-    --------------------------------------------------------
-
-    Cross
-    X
-
-    또는 알 수 없는 라벨이면 None을 반환합니다.
-
-    --------------------------------------------------------
-    왜 필요한가?
-    --------------------------------------------------------
-
-    JSON 파일에는 라벨이 다음과 같이 다양하게 저장될 수 있습니다.
-
-        "+"
-        "cross"
-        "Cross"
-
-    프로그램 내부에서는 이것들을 모두 동일한
-    "Cross"로 처리하는 것이 편리합니다.
-
-    그래서 입력 단계에서 하나의 표준 이름으로 통일합니다.
+    알 수 없는 라벨이면 None을 반환합니다.
     """
 
-    # label이 문자열이 아니면 처리할 수 없습니다.
-    #
-    # 예:
-    #   123
-    #   None
-    #   []
-    #
-    # 이런 값이 들어오면 None을 반환합니다.
+    # 문자열이 아니면 라벨로 사용할 수 없습니다.
     if not isinstance(label, str):
         return None
 
     # 앞뒤 공백을 제거하고 소문자로 변경합니다.
-    #
-    # 예:
-    #
-    #   " Cross " → "cross"
-    #   " X "     → "x"
-    #
     value = label.strip().lower()
 
-    # "+" 또는 "cross"이면 Cross로 통일합니다.
+    # + 또는 cross는 Cross로 통일합니다.
     if value in ("+", "cross"):
         return "Cross"
 
-    # "x"이면 X로 통일합니다.
+    # x는 X로 통일합니다.
     if value in ("x",):
         return "X"
 
-    # 지원하지 않는 라벨입니다.
+    # 그 외에는 알 수 없는 라벨입니다.
     return None
 
 
@@ -252,10 +127,9 @@ def normalize_label(label: Any) -> Optional[str]:
 
 def is_matrix(value: Any) -> bool:
     """
-    입력값이 2차원 리스트 형태인지 확인합니다.
+    입력값이 2차원 리스트인지 확인합니다.
 
     정상적인 행렬 예:
-
         [
             [1, 2, 3],
             [4, 5, 6],
@@ -263,100 +137,52 @@ def is_matrix(value: Any) -> bool:
         ]
 
     잘못된 예:
-
         [1, 2, 3]
 
-    또는
-
-        [
-            [1, 2],
-            [3, 4, 5]
-        ]
-
-    이 함수는 기본적인 '리스트 안에 리스트가 있는가'만
-    확인합니다.
-
-    각 행의 길이가 같은지는 matrix_size()에서 검사합니다.
+    반환값:
+        True  → 2차원 리스트
+        False → 행렬이 아님
     """
 
-    # 전체 값이 list인지 확인합니다.
-    #
-    # 동시에 비어 있는 리스트도 허용하지 않습니다.
+    # 전체가 리스트이고,
+    # 비어 있지 않아야 합니다.
     if not isinstance(value, list) or len(value) == 0:
         return False
 
-    # 모든 원소가 list인지 확인합니다.
-    #
-    # 예:
-    #
-    # [
-    #     [1, 2],
-    #     [3, 4]
-    # ]
-    #
-    # → True
-    #
-    #
-    # [
-    #     [1, 2],
-    #     3
-    # ]
-    #
-    # → False
+    # 모든 요소가 리스트인지 확인합니다.
     if not all(isinstance(row, list) for row in value):
         return False
 
     return True
 
 
-def matrix_size(value: Any) -> Optional[Tuple[int, int]]:
+def matrix_size(matrix: Any) -> Optional[Tuple[int, int]]:
     """
-    행렬의 행(row)과 열(column) 크기를 반환합니다.
+    행렬의 크기를 확인합니다.
 
     예:
+        3×3 행렬 → (3, 3)
+        5×5 행렬 → (5, 5)
 
-        [
-            [1, 2, 3],
-            [4, 5, 6]
-        ]
-
-    → (2, 3)
-
-    2행 3열이라는 의미입니다.
-
-
-    행마다 길이가 다르면 정상적인 행렬이 아니므로
-    None을 반환합니다.
+    행마다 길이가 다르면 올바른 행렬이 아니므로 None을 반환합니다.
     """
 
     # 먼저 2차원 리스트인지 확인합니다.
-    if not is_matrix(value):
+    if not is_matrix(matrix):
         return None
 
-    # 행의 개수
-    rows = len(value)
+    # 행의 개수를 구합니다.
+    rows = len(matrix)
 
-    # 첫 번째 행의 열 개수
-    cols = len(value[0])
+    # 첫 번째 행의 열 개수를 기준으로 사용합니다.
+    cols = len(matrix[0])
 
     # 열이 하나도 없으면 잘못된 행렬입니다.
     if cols == 0:
         return None
 
     # 모든 행의 열 개수가 같은지 확인합니다.
-    #
-    # 예:
-    #
-    # [1, 2, 3] → 3개
-    # [4, 5, 6] → 3개
-    #
-    # 정상
-    #
-    # [1, 2, 3] → 3개
-    # [4, 5]    → 2개
-    #
-    # 비정상
-    if any(len(row) != cols for row in value):
+    if any(len(row) != cols for row in matrix):
         return None
 
     return rows, cols
@@ -369,62 +195,31 @@ def validate_square_matrix(
     """
     행렬이 올바른 정사각형인지 검사합니다.
 
-    반환값은 두 개입니다.
+    검사하는 내용:
+        1. 2차원 리스트인가?
+        2. 각 행의 길이가 같은가?
+        3. 행과 열의 크기가 같은가?
+        4. 원하는 크기와 같은가?
+        5. 모든 값이 숫자로 변환 가능한가?
 
-        (True, "")
-        (False, "오류 메시지")
-
-    --------------------------------------------------------
-    예
-    --------------------------------------------------------
-
-    3x3 행렬이 정상이라면:
-
-        (True, "")
-
-    3x2라면:
-
-        (False, "정사각형이 아닙니다...")
-
-
-    expected_size가 지정된 경우에는
-    정확히 그 크기인지도 검사합니다.
+    반환:
+        (True, "")             → 정상
+        (False, "오류 설명")   → 오류
     """
 
-    # 행렬의 크기를 가져옵니다.
     size = matrix_size(matrix)
 
-    # 행렬 자체가 잘못되었으면 오류입니다.
+    # 기본적인 행렬 구조가 잘못된 경우
     if size is None:
-        return (
-            False,
-            "2차원 배열이 아니거나 행의 길이가 서로 다릅니다."
-        )
+        return False, "2차원 배열이 아니거나 행의 길이가 서로 다릅니다."
 
-    # 행과 열의 크기를 분리합니다.
     rows, cols = size
 
-    # 정사각형인지 확인합니다.
-    #
-    # 3x3 → 정상
-    # 5x5 → 정상
-    #
-    # 3x4 → 비정상
+    # 행과 열의 크기가 같아야 정사각형입니다.
     if rows != cols:
-        return (
-            False,
-            f"정사각형이 아닙니다. 현재 크기: {rows}x{cols}"
-        )
+        return False, f"정사각형이 아닙니다. 현재 크기: {rows}x{cols}"
 
-    # 특정 크기를 요구한 경우 크기가 정확히 일치하는지
-    # 검사합니다.
-    #
-    # 예:
-    #
-    # expected_size = 5
-    #
-    # 실제가 5x5 → 정상
-    # 실제가 3x3 → 오류
+    # 특정 크기를 요구한 경우 크기도 확인합니다.
     if expected_size is not None and rows != expected_size:
         return (
             False,
@@ -432,29 +227,21 @@ def validate_square_matrix(
             f"실제 크기 {rows}x{cols}"
         )
 
-    # 행렬의 모든 값이 숫자로 변환 가능한지도 확인합니다.
-    #
-    # float(value)가 가능한지 검사합니다.
-    #
-    # "3.14" → 가능
-    # 10     → 가능
-    # "abc"  → 불가능
+    # 모든 값을 하나씩 확인합니다.
     for r, row in enumerate(matrix):
-
         for c, value in enumerate(row):
 
             try:
+                # 숫자로 변환 가능한지 확인합니다.
                 float(value)
 
             except (TypeError, ValueError):
 
                 return (
                     False,
-                    f"숫자가 아닌 값 발견: 위치 ({r}, {c}), "
-                    f"값={value!r}"
+                    f"숫자가 아닌 값 발견: 위치 ({r}, {c}), 값={value!r}"
                 )
 
-    # 모든 검사를 통과했습니다.
     return True, ""
 
 
@@ -462,31 +249,16 @@ def to_float_matrix(
     matrix: List[List[Any]]
 ) -> List[List[float]]:
     """
-    행렬의 모든 값을 float로 변환합니다.
+    행렬 안의 모든 값을 float 타입으로 변환합니다.
 
     예:
-
-        [
-            [1, 2],
-            [3, "4.5"]
-        ]
-
-    →
-
-        [
-            [1.0, 2.0],
-            [3.0, 4.5]
-        ]
-
-    MAC 계산을 할 때 모든 값을 float로 통일하면
-    계산을 일관되게 처리할 수 있습니다.
+        [["1", "2"], ["3", "4"]]
+        ↓
+        [[1.0, 2.0], [3.0, 4.0]]
     """
 
     return [
-        [
-            float(value)
-            for value in row
-        ]
+        [float(value) for value in row]
         for row in matrix
     ]
 
@@ -500,66 +272,32 @@ def mac_score(
     filter_matrix: List[List[float]]
 ) -> float:
     """
-    패턴과 필터를 같은 위치끼리 곱한 다음
-    모든 결과를 더합니다.
+    패턴과 필터를 같은 위치끼리 곱한 후
+    모든 값을 더합니다.
 
-    이것이 이 프로그램의 가장 핵심적인 계산입니다.
+    이것이 이 프로그램에서 가장 중요한 연산입니다.
 
+    예:
+        pattern:
+            1 2
+            3 4
 
-    --------------------------------------------------------
-    예
-    --------------------------------------------------------
+        filter:
+            1 0
+            0 1
 
-    pattern:
+        계산:
+            1×1 + 2×0 + 3×0 + 4×1
+            = 5
 
-        1 2 3
-        4 5 6
-        7 8 9
-
-
-    filter:
-
-        1 0 1
-        0 1 0
-        1 0 1
-
-
-    계산:
-
-        1×1 + 2×0 + 3×1
-      + 4×0 + 5×1 + 6×0
-      + 7×1 + 8×0 + 9×1
-
-
-    = 1 + 3 + 5 + 7 + 9
-
-    = 25
-
-
-    --------------------------------------------------------
-    시간 복잡도
-    --------------------------------------------------------
-
-    N×N 행렬이면 모든 칸을 한 번씩 확인합니다.
-
-        N × N = N²
-
-    따라서 시간 복잡도는
-
-        O(N²)
-
-    입니다.
+    시간 복잡도:
+        N×N의 모든 위치를 확인하므로 O(N²)
     """
 
-    # 패턴의 행 개수를 가져옵니다.
-    #
-    # 이 프로그램에서는 정사각형 행렬만 사용하므로
-    # rows가 곧 열의 개수이기도 합니다.
+    # 행렬의 크기
     rows = len(pattern)
 
-    # MAC 결과를 저장할 변수입니다.
-    #
-    # 처음에는 0에서 시작합니다.
+    # MAC 결과를 저장할 변수
     score = 0.0
 
     # 모든 행을 순회합니다.
@@ -568,16 +306,13 @@ def mac_score(
         # 모든 열을 순회합니다.
         for c in range(rows):
 
-            # 같은 위치의 패턴 값과 필터 값을 곱하고
-            # 그 결과를 기존 score에 더합니다.
-            #
-            # 이것이 Multiply + Accumulate입니다.
+            # 같은 위치의 패턴과 필터를 곱해서
+            # 기존 점수에 더합니다.
             score += (
                 pattern[r][c]
                 * filter_matrix[r][c]
             )
 
-    # 최종 MAC 점수를 반환합니다.
     return score
 
 
@@ -593,59 +328,34 @@ def classify_scores(
     epsilon: float = EPSILON
 ) -> str:
     """
-    두 MAC 점수를 비교해서 더 높은 쪽의 라벨을 반환합니다.
+    두 MAC 점수를 비교하여 더 높은 쪽을 선택합니다.
 
-    --------------------------------------------------------
-    판정 규칙
-    --------------------------------------------------------
+    예:
+        A = 10
+        B = 5
+        → "A"
 
-    score_a = 20
-    score_b = 10
+        A = 5
+        B = 10
+        → "B"
 
-    → label_a
-
-
-    score_a = 10
-    score_b = 20
-
-    → label_b
-
-
-    두 값의 차이가 아주 작으면
-
-    → UNDECIDED
-
-
-    --------------------------------------------------------
-    epsilon이 필요한 이유
-    --------------------------------------------------------
-
-    컴퓨터의 실수 계산에는 미세한 오차가 발생할 수 있습니다.
-
-    따라서 단순히
-
-        score_a == score_b
-
-    만 사용하는 것보다
-
-        abs(score_a - score_b) < epsilon
-
-    방식으로 비교하는 것이 안전합니다.
+    두 점수의 차이가 너무 작으면
+    확실하게 구분할 수 없다고 판단하여
+    "UNDECIDED"를 반환합니다.
     """
 
-    # 두 점수의 차이를 절댓값으로 계산합니다.
+    # 두 점수의 차이를 계산합니다.
     difference = abs(score_a - score_b)
 
-    # 차이가 epsilon보다 작으면 사실상 같은 점수라고
-    # 판단합니다.
+    # 거의 같은 점수라면 판정하지 않습니다.
     if difference < epsilon:
         return "UNDECIDED"
 
-    # A 점수가 더 높으면 A를 반환합니다.
+    # A가 더 높으면 A를 반환합니다.
     if score_a > score_b:
         return label_a
 
-    # 그렇지 않으면 B가 더 높다는 의미입니다.
+    # 그렇지 않으면 B가 더 높습니다.
     return label_b
 
 
@@ -655,60 +365,36 @@ def classify_scores(
 
 def create_cross_filter(size: int) -> List[List[float]]:
     """
-    '+' 모양의 Cross 필터를 자동으로 생성합니다.
+    '+' 모양의 Cross 필터를 자동으로 만듭니다.
 
-    예: size=5
+    예: 3×3
 
-        0 0 1 0 0
-        0 0 1 0 0
-        1 1 1 1 1
-        0 0 1 0 0
-        0 0 1 0 0
+        0 1 0
+        1 1 1
+        0 1 0
 
-
-    가운데 행 전체와 가운데 열 전체가 1이 됩니다.
-
-    나머지는 0입니다.
+    가운데 행과 가운데 열을 1로 만들고
+    나머지는 0으로 만듭니다.
     """
 
-    # 최소 크기 확인
+    # 너무 작은 크기는 허용하지 않습니다.
     if size < MIN_SIZE:
         raise ValueError(
             f"필터 크기는 최소 {MIN_SIZE} 이상이어야 합니다."
         )
 
-    # 홀수 크기인지 확인합니다.
-    #
-    # Cross의 정확한 중앙 위치를 정하려면
-    # 홀수 크기가 편리합니다.
-    #
-    # 5x5 → 중앙 = 2
-    # 7x7 → 중앙 = 3
-    #
-    # 4x4처럼 정확한 가운데 칸이 하나가 아닌 경우는
-    # 이 프로그램에서 지원하지 않습니다.
+    # 가운데 위치가 필요하기 때문에 홀수 크기만 사용합니다.
     if size % 2 == 0:
         raise ValueError(
             "Cross 필터는 중앙 위치가 필요하므로 홀수 크기만 지원합니다."
         )
 
-    # 중앙 위치를 계산합니다.
-    #
-    # 5 → 2
-    # 13 → 6
-    # 25 → 12
+    # 예: size=3이면 center=1
     center = size // 2
 
-    # 이중 리스트를 생성합니다.
-    #
-    # r == center
-    #     → 가운데 행
-    #
-    # c == center
-    #     → 가운데 열
-    #
-    # 둘 중 하나라도 만족하면 1
-    # 아니면 0
+    # 각 위치를 검사하여
+    # 가운데 행 또는 가운데 열이면 1,
+    # 아니면 0을 넣습니다.
     return [
         [
             1.0
@@ -726,46 +412,37 @@ def create_cross_filter(size: int) -> List[List[float]]:
 
 def create_x_filter(size: int) -> List[List[float]]:
     """
-    'X' 모양의 필터를 자동으로 생성합니다.
+    'X' 모양의 필터를 자동으로 만듭니다.
 
-    예: 5x5
+    예: 3×3
 
-        1 0 0 0 1
-        0 1 0 1 0
-        0 0 1 0 0
-        0 1 0 1 0
-        1 0 0 0 1
+        1 0 1
+        0 1 0
+        1 0 1
 
-
-    X 모양의 두 대각선을 1로 만듭니다.
+    두 대각선 위치를 1로 만들고
+    나머지는 0으로 만듭니다.
     """
 
-    # 최소 크기 확인
     if size < MIN_SIZE:
         raise ValueError(
             f"필터 크기는 최소 {MIN_SIZE} 이상이어야 합니다."
         )
 
-    # 홀수 크기인지 확인합니다.
     if size % 2 == 0:
         raise ValueError(
             "X 필터는 중앙 위치가 필요하므로 홀수 크기만 지원합니다."
         )
 
-    # 다음 두 조건에 해당하는 위치를 1로 만듭니다.
-    #
-    # 1. r == c
-    #
-    #    왼쪽 위 → 오른쪽 아래 대각선
-    #
-    #
-    # 2. r + c == size - 1
-    #
-    #    오른쪽 위 → 왼쪽 아래 대각선
-    #
-    # 두 조건을 합치면 X 모양이 됩니다.
     return [
         [
+            # r == c
+            #     → 왼쪽 위에서 오른쪽 아래로 가는 대각선
+            #
+            # r + c == size - 1
+            #     → 오른쪽 위에서 왼쪽 아래로 가는 대각선
+            #
+            # 둘 중 하나라도 맞으면 X 모양이므로 1
             1.0
             if r == c or r + c == size - 1
             else 0.0
@@ -784,28 +461,13 @@ def print_matrix(
     title: str
 ) -> None:
     """
-    행렬을 사람이 보기 쉬운 형태로 출력합니다.
-
-    예:
-
-        [Cross Filter]
-
-        0 1 0
-        1 1 1
-        0 1 0
+    행렬을 사람이 보기 편한 형태로 출력합니다.
     """
 
     print(f"\n[{title}]")
 
-    # 각 행을 하나씩 출력합니다.
     for row in matrix:
 
-        # g 포맷을 사용하면
-        #
-        # 1.0 → 1
-        # 0.0 → 0
-        #
-        # 처럼 깔끔하게 출력할 수 있습니다.
         print(
             " ".join(
                 f"{value:g}"
@@ -824,68 +486,47 @@ def measure_mac(
     repeats: int = PERFORMANCE_REPEATS
 ) -> Tuple[float, float]:
     """
-    동일한 MAC 연산을 여러 번 실행하여 평균 실행 시간을
-    측정합니다.
+    같은 MAC 연산을 여러 번 실행하여 평균 시간을 측정합니다.
 
     반환값:
-
         (
             평균 실행 시간(ms),
             마지막 MAC 결과
         )
 
+    중요한 점:
+        여기서는 새로운 테스트 패턴을 만들지 않습니다.
 
-    --------------------------------------------------------
-    왜 여러 번 실행하는가?
-    --------------------------------------------------------
+        전달받은 pattern을 그대로 사용합니다.
 
-    한 번만 실행하면 매우 짧은 연산의 경우
-    측정 오차가 커질 수 있습니다.
+    즉,
 
-    그래서 기본적으로 10번 실행합니다.
+        실제 입력 패턴
+              ↓
+        MAC 성능 측정
 
-    예:
-
-        0.005 ms
-        0.004 ms
-        0.006 ms
-        ...
-        
-    이렇게 측정한 후 평균을 구합니다.
-
-
-    --------------------------------------------------------
-    중요한 점
-    --------------------------------------------------------
-
-    이 함수는 새로운 테스트 패턴을 만들지 않습니다.
-
-    호출할 때 전달받은 실제 pattern을 그대로 사용합니다.
+    방식입니다.
     """
 
-    # 반복 횟수가 0 이하이면 잘못된 입력입니다.
+    # 반복 횟수는 최소 1회 이상이어야 합니다.
     if repeats <= 0:
         raise ValueError(
             "repeats는 1 이상이어야 합니다."
         )
 
-    # 각 반복의 실행 시간을 저장할 리스트입니다.
+    # 각 반복의 실행 시간을 저장합니다.
     elapsed_times = []
 
-    # 마지막 MAC 결과를 저장합니다.
     last_score = 0.0
 
     # --------------------------------------------------------
     # Warm-up
     # --------------------------------------------------------
     #
-    # 실제 측정 전에 MAC을 한 번 실행합니다.
+    # 실제 측정 전에 한 번 실행합니다.
     #
-    # 여기서는 실행 시간을 기록하지 않습니다.
-    #
-    # 목적은 첫 실행에 발생할 수 있는 초기 실행 비용 등을
-    # 실제 측정에서 어느 정도 분리하기 위한 것입니다.
-    #
+    # 첫 실행에는 Python이나 시스템의 여러 초기 작업 때문에
+    # 평소보다 시간이 오래 걸릴 수 있기 때문입니다.
     last_score = mac_score(
         pattern,
         filter_matrix
@@ -897,30 +538,19 @@ def measure_mac(
 
     for _ in range(repeats):
 
-        # 고해상도 시간 측정을 시작합니다.
+        # 시작 시간을 기록합니다.
         start = time.perf_counter()
 
         # 실제 MAC 연산
-        #
-        # 중요한 부분:
-        # 전달받은 pattern을 그대로 사용합니다.
         last_score = mac_score(
             pattern,
             filter_matrix
         )
 
-        # 시간 측정 종료
+        # 종료 시간을 기록합니다.
         end = time.perf_counter()
 
-        # 초 단위 차이를 밀리초(ms)로 변환합니다.
-        #
-        # 1초 = 1000ms
-        #
-        # 따라서
-        #
-        # (end - start) * 1000
-        #
-        # 을 사용합니다.
+        # 초 단위를 ms(밀리초)로 변환합니다.
         elapsed_times.append(
             (end - start) * 1000.0
         )
@@ -931,7 +561,6 @@ def measure_mac(
         / len(elapsed_times)
     )
 
-    # 평균 시간과 마지막 MAC 결과를 반환합니다.
     return average_ms, last_score
 
 
@@ -948,21 +577,26 @@ def run_performance_analysis(
     repeats: int = PERFORMANCE_REPEATS
 ) -> None:
     """
-    하나의 실제 패턴을 가지고 두 필터의 MAC 성능을
-    비교합니다.
+    하나의 실제 패턴을 가지고
+    두 필터의 MAC 성능을 비교합니다.
 
-    출력 내용:
+    측정하는 것은:
 
-        - 패턴 크기
-        - 필터별 평균 실행 시간
-        - 필터별 MAC 결과
-        - MAC 위치 수(N²)
+        pattern + filter_a
+        pattern + filter_b
+
+    입니다.
+
+    별도의 테스트 패턴을 만들지 않고
+    실제 입력 패턴을 그대로 사용합니다.
     """
 
-    # 패턴의 크기를 확인합니다.
+    # --------------------------------------------------------
+    # 패턴 크기 확인
+    # --------------------------------------------------------
+
     size = matrix_size(pattern)
 
-    # 잘못된 행렬이면 분석을 중단합니다.
     if size is None:
 
         print(
@@ -972,10 +606,9 @@ def run_performance_analysis(
 
         return
 
-    # 행과 열의 크기를 가져옵니다.
     rows, cols = size
 
-    # 정사각형인지 다시 확인합니다.
+    # 패턴은 정사각형이어야 합니다.
     if rows != cols:
 
         print(
@@ -985,11 +618,14 @@ def run_performance_analysis(
 
         return
 
-    # 필터 A와 필터 B의 크기를 확인합니다.
+    # --------------------------------------------------------
+    # 필터 크기 확인
+    # --------------------------------------------------------
+
     filter_a_size = matrix_size(filter_a)
     filter_b_size = matrix_size(filter_b)
 
-    # 필터 A의 크기가 패턴과 같은지 확인합니다.
+    # A 필터와 패턴 크기가 같은지 확인합니다.
     if filter_a_size != (rows, cols):
 
         print(
@@ -999,7 +635,7 @@ def run_performance_analysis(
 
         return
 
-    # 필터 B의 크기가 패턴과 같은지 확인합니다.
+    # B 필터와 패턴 크기가 같은지 확인합니다.
     if filter_b_size != (rows, cols):
 
         print(
@@ -1010,32 +646,7 @@ def run_performance_analysis(
         return
 
     # --------------------------------------------------------
-    # MAC 위치 수
-    # --------------------------------------------------------
-    #
-    # N×N 행렬이면 mac_score()에서
-    #
-    # for r
-    #   for c
-    #
-    # 구조로 모든 칸을 한 번씩 확인합니다.
-    #
-    # 따라서 위치 수는
-    #
-    #     N × N = N²
-    #
-    # 입니다.
-    #
-    # 예:
-    #
-    # 5x5   → 25
-    # 13x13 → 169
-    # 25x25 → 625
-    #
-    operation_count = rows * cols
-
-    # --------------------------------------------------------
-    # 성능 분석 시작 메시지
+    # 성능 분석 시작
     # --------------------------------------------------------
 
     print("\n#---------------------------------------")
@@ -1053,7 +664,6 @@ def run_performance_analysis(
 
     print()
 
-    # 표의 제목을 출력합니다.
     print(
         f"{'필터':<15}"
         f"{'평균 시간(ms)':>20}"
@@ -1063,28 +673,26 @@ def run_performance_analysis(
 
     print("-" * 80)
 
-    # --------------------------------------------------------
-    # 필터 A 성능 측정
-    # --------------------------------------------------------
-
+    # A 필터의 성능 측정
     time_a, score_a = measure_mac(
         pattern,
         filter_a,
         repeats
     )
 
-    # --------------------------------------------------------
-    # 필터 B 성능 측정
-    # --------------------------------------------------------
-
+    # B 필터의 성능 측정
     time_b, score_b = measure_mac(
         pattern,
         filter_b,
         repeats
     )
 
+    # N×N 행렬이면 총 N²개의 위치에서
+    # 곱셈과 덧셈을 수행합니다.
+    operation_count = rows * cols
+
     # --------------------------------------------------------
-    # 결과 출력
+    # 측정 결과 출력
     # --------------------------------------------------------
 
     print(
@@ -1101,7 +709,7 @@ def run_performance_analysis(
         f"{operation_count:>20}"
     )
 
-    # 두 필터의 평균 실행 시간을 다시 계산합니다.
+    # 두 필터의 평균 실행 시간을 계산합니다.
     average_time = (
         time_a + time_b
     ) / 2.0
@@ -1111,11 +719,6 @@ def run_performance_analysis(
     print(
         f"전체 평균 MAC 시간: "
         f"{average_time:.6f} ms"
-    )
-
-    print(
-        f"MAC 위치 수(N²): "
-        f"{operation_count}"
     )
 
 
@@ -1128,21 +731,19 @@ def read_matrix_from_console(
     matrix_name: str
 ) -> List[List[float]]:
     """
-    콘솔에서 사용자가 N×N 행렬을 직접 입력합니다.
+    사용자가 콘솔에서 N×N 행렬을 직접 입력합니다.
 
-    예를 들어 size=3이면 다음과 같이 입력합니다.
+    예를 들어 3×3이면:
 
         1 0 1
         0 1 0
         1 0 1
 
-    각 줄에는 정확히 3개의 숫자가 있어야 합니다.
+    처럼 3줄을 입력합니다.
 
-
-    입력이 잘못되면 해당 행을 다시 입력받습니다.
+    잘못 입력하면 다시 입력하도록 합니다.
     """
 
-    # 행렬 전체를 정상적으로 입력할 때까지 반복합니다.
     while True:
 
         print(
@@ -1150,33 +751,21 @@ def read_matrix_from_console(
             f"({size}줄 입력, 공백 구분)"
         )
 
-        # 입력된 행을 저장할 리스트입니다.
         matrix = []
 
-        # size만큼 행을 입력받습니다.
+        # 행을 하나씩 입력받습니다.
         for row_index in range(size):
 
-            # 현재 행이 정상적으로 입력될 때까지
-            # 반복합니다.
             while True:
 
-                # 한 줄을 입력받습니다.
                 text = input(
                     f"{row_index + 1}/{size}행 > "
                 ).strip()
 
-                # 공백을 기준으로 문자열을 나눕니다.
-                #
-                # 예:
-                #
-                # "1 2 3"
-                #
-                # →
-                #
-                # ["1", "2", "3"]
+                # 공백을 기준으로 숫자를 나눕니다.
                 parts = text.split()
 
-                # 입력한 숫자의 개수가 size와 같은지 확인합니다.
+                # 한 행에 정확히 size개의 값이 있어야 합니다.
                 if len(parts) != size:
 
                     print(
@@ -1185,18 +774,11 @@ def read_matrix_from_console(
                         f"공백으로 구분해 입력하세요."
                     )
 
-                    # 현재 행을 다시 입력받습니다.
                     continue
 
                 try:
 
-                    # 문자열을 float로 변환합니다.
-                    #
-                    # ["1", "2", "3"]
-                    #
-                    # →
-                    #
-                    # [1.0, 2.0, 3.0]
+                    # 문자열을 실수로 변환합니다.
                     row = [
                         float(value)
                         for value in parts
@@ -1204,51 +786,53 @@ def read_matrix_from_console(
 
                 except ValueError:
 
-                    # 숫자로 변환할 수 없는 값이 있으면
-                    # 다시 입력받습니다.
                     print(
                         "입력 형식 오류: 숫자만 입력하세요."
                     )
 
                     continue
 
-                # 정상적으로 입력된 행을 matrix에 추가합니다.
+                # 정상적으로 입력된 행을 저장합니다.
                 matrix.append(row)
 
-                # 현재 행 입력을 종료합니다.
                 break
 
-        # 모든 행을 입력한 후 전체 행렬을 다시 검사합니다.
+        # 전체 행렬이 정상인지 마지막으로 확인합니다.
         ok, reason = validate_square_matrix(
             matrix,
             expected_size=size
         )
 
-        # 정상이라면 입력한 행렬을 반환합니다.
         if ok:
             return matrix
 
-        # 혹시 전체 행렬에 문제가 있으면
-        # 처음부터 다시 입력받습니다.
         print(f"입력 오류: {reason}")
         print("행렬을 처음부터 다시 입력해주세요.")
 
 
 def run_user_mode() -> None:
     """
-    사용자 입력 모드 전체를 실행합니다.
+    사용자 입력 모드입니다.
 
-    순서:
+    사용자가 직접:
 
-        1. 필터 A 입력
-        2. 필터 B 입력
-        3. 패턴 입력
-        4. MAC 계산
-        5. 판정
-        6. 성능 분석
+        필터 A
+        필터 B
+        패턴
+
+    을 입력합니다.
+
+    이후:
+
+        1. MAC 점수 계산
+        2. A/B 판정
+        3. 실행 시간 측정
+        4. 성능 분석
+
+    을 수행합니다.
     """
 
-    # 사용자 모드에서는 3x3 행렬만 사용합니다.
+    # 현재 사용자 모드는 3×3만 사용합니다.
     size = 3
 
     # --------------------------------------------------------
@@ -1259,13 +843,11 @@ def run_user_mode() -> None:
     print("# [1] 필터 입력")
     print("#---------------------------------------")
 
-    # 필터 A 입력
     filter_a = read_matrix_from_console(
         size,
         "필터 A"
     )
 
-    # 필터 B 입력
     filter_b = read_matrix_from_console(
         size,
         "필터 B"
@@ -1282,7 +864,6 @@ def run_user_mode() -> None:
     print("# [2] 패턴 입력")
     print("#---------------------------------------")
 
-    # 실제 입력 패턴
     pattern = read_matrix_from_console(
         size,
         "패턴"
@@ -1298,49 +879,42 @@ def run_user_mode() -> None:
     print("# [3] MAC 결과")
     print("#---------------------------------------")
 
-    # 패턴 × 필터 A MAC
+    # 패턴과 A 필터의 MAC 점수
     score_a = mac_score(
         pattern,
         filter_a
     )
 
-    # 패턴 × 필터 B MAC
+    # 패턴과 B 필터의 MAC 점수
     score_b = mac_score(
         pattern,
         filter_b
     )
 
-    # 필터 A의 평균 실행 시간 측정
+    # A 필터의 평균 실행 시간
     average_a_ms, _ = measure_mac(
         pattern,
         filter_a,
         PERFORMANCE_REPEATS
     )
 
-    # 필터 B의 평균 실행 시간 측정
+    # B 필터의 평균 실행 시간
     average_b_ms, _ = measure_mac(
         pattern,
         filter_b,
         PERFORMANCE_REPEATS
     )
 
-    # A와 B의 평균 시간을 다시 평균냅니다.
+    # A와 B의 평균 실행 시간
     average_ms = (
         average_a_ms + average_b_ms
     ) / 2.0
 
-    # 3x3 행렬이므로 MAC 위치 수는
-    #
-    # 3 × 3 = 9
-    #
-    operation_count = size * size
-
     # --------------------------------------------------------
     # 판정
     # --------------------------------------------------------
-    #
-    # 여기서는 사용자 입력 필터를 A/B라고 부르므로
-    # 결과도 A 또는 B로 표시합니다.
+
+    # 점수가 높은 필터를 선택합니다.
     result = classify_scores(
         score_a,
         score_b,
@@ -1349,27 +923,19 @@ def run_user_mode() -> None:
         epsilon=EPSILON
     )
 
-    # MAC 결과 출력
     print(
-        f"A MAC 결과: {score_a:.10f}"
+        f"A 점수: {score_a:.10f}"
     )
 
     print(
-        f"B MAC 결과: {score_b:.10f}"
+        f"B 점수: {score_b:.10f}"
     )
 
-    # MAC 위치 수 출력
-    print(
-        f"MAC 위치 수(N²): {operation_count}"
-    )
-
-    # 평균 실행 시간 출력
     print(
         f"연산 시간(평균/{PERFORMANCE_REPEATS}회): "
         f"{average_ms:.6f} ms"
     )
 
-    # 동점인지 확인합니다.
     if result == "UNDECIDED":
 
         print(
@@ -1391,8 +957,16 @@ def run_user_mode() -> None:
     print("# [4] 성능 분석")
     print("#---------------------------------------")
 
-    # 앞에서 계산한 동일한 실제 패턴을 이용해
-    # 성능 분석을 한 번 더 수행합니다.
+    # 여기서 중요한 점:
+    #
+    # 성능 측정을 위해 새로운 패턴을 만들지 않습니다.
+    #
+    # 사용자가 실제로 입력한
+    #
+    #     pattern
+    #
+    # 을 그대로 성능 측정에 사용합니다.
+
     run_performance_analysis(
         pattern=pattern,
         filter_a=filter_a,
@@ -1412,25 +986,14 @@ def load_json_file(
 ) -> Dict[str, Any]:
     """
     JSON 파일을 열어서 Python 객체로 변환합니다.
-
-    예를 들어 data.json이
-
-        {
-            "filters": {...},
-            "patterns": {...}
-        }
-
-    형태라면 Python의 dict로 반환됩니다.
     """
 
-    # UTF-8 인코딩으로 파일을 엽니다.
     with open(
         path,
         "r",
         encoding="utf-8"
     ) as file:
 
-        # JSON 문자열을 Python 객체로 변환합니다.
         return json.load(file)
 
 
@@ -1438,64 +1001,27 @@ def extract_size_from_pattern_key(
     key: str
 ) -> Optional[int]:
     """
-    JSON 패턴 이름에서 행렬 크기를 추출합니다.
-
-    지원하는 형식:
-
-        size_5_0
-        size_5_1
-
-        size_13_0
-        size_13_3
-
-        size_25_0
-        size_25_10
-
+    JSON의 패턴 이름에서 행렬 크기를 추출합니다.
 
     예:
+        size_5_0   → 5
+        size_13_3  → 13
+        size_25_10 → 25
 
-        size_13_3
-
-    에서
-
-        13
-
-    을 추출합니다.
+    여기서 뒤의 숫자는 패턴 번호이고
+    앞의 숫자가 행렬 크기입니다.
     """
 
-    # 정규표현식으로 패턴 이름을 검사합니다.
-    #
-    # r"size_(\d+)_(\d+)"
-    #
-    # 의미:
-    #
-    # size_
-    #   → 문자열 "size_"가 반드시 있어야 함
-    #
-    # (\d+)
-    #   → 숫자가 한 개 이상
-    #
-    # _
-    #   → 밑줄
-    #
-    # (\d+)
-    #   → 다시 숫자가 한 개 이상
-    #
-    # 따라서
-    #
-    # size_13_3
-    #
-    # 이 매칭됩니다.
     match = re.fullmatch(
         r"size_(\d+)_(\d+)",
         key
     )
 
-    # 형식이 맞지 않으면 None
+    # 패턴 이름 형식이 맞지 않으면 None
     if not match:
         return None
 
-    # 첫 번째 숫자 그룹을 정수로 변환합니다.
+    # 첫 번째 숫자만 크기로 사용합니다.
     return int(match.group(1))
 
 
@@ -1512,33 +1038,23 @@ def validate_filter_group(
     Optional[Dict[str, List[List[float]]]]
 ]:
     """
-    JSON 안에서 특정 크기의 Cross/X 필터가
-    정상적으로 존재하는지 검사합니다.
+    JSON 안에 있는 특정 크기의 Cross/X 필터가
+    올바르게 저장되어 있는지 검사합니다.
 
     예:
-
         size = 5
 
-    라면 JSON에 다음 구조가 필요합니다.
+    그러면 JSON에서
 
-        "filters": {
-            "size_5": {
-                "cross": [...],
-                "x": [...]
-            }
-        }
+        filters
+          └── size_5
+                ├── cross
+                └── x
 
-
-    반환값:
-
-        정상:
-            (True, "", 필터들)
-
-        오류:
-            (False, "오류 메시지", None)
+    구조를 확인합니다.
     """
 
-    # filters 자체가 dictionary인지 확인합니다.
+    # filters가 객체인지 확인합니다.
     if not isinstance(filters, dict):
 
         return (
@@ -1547,11 +1063,7 @@ def validate_filter_group(
             None
         )
 
-    # 요청된 크기의 key를 만듭니다.
-    #
-    # size=5
-    #
-    # → "size_5"
+    # 예: size_5
     size_key = f"size_{size}"
 
     # 해당 크기의 필터가 존재하는지 확인합니다.
@@ -1563,10 +1075,9 @@ def validate_filter_group(
             None
         )
 
-    # 해당 크기의 필터 그룹을 가져옵니다.
     group = filters[size_key]
 
-    # 그룹 자체도 dictionary여야 합니다.
+    # size_N의 값도 객체여야 합니다.
     if not isinstance(group, dict):
 
         return (
@@ -1575,13 +1086,11 @@ def validate_filter_group(
             None
         )
 
-    # 검증을 통과한 필터를 저장할 dictionary입니다.
     normalized = {}
 
-    # 반드시 Cross와 X 두 필터가 있어야 합니다.
+    # Cross와 X 두 필터가 모두 필요한지 확인합니다.
     for raw_label in ("cross", "x"):
 
-        # 필터가 존재하지 않으면 오류
         if raw_label not in group:
 
             return (
@@ -1596,16 +1105,14 @@ def validate_filter_group(
             raw_label
         )
 
-        # 실제 행렬 데이터
         matrix = group[raw_label]
 
-        # 행렬의 크기와 숫자 여부를 확인합니다.
+        # 실제 필터 행렬의 크기와 데이터도 검사합니다.
         ok, reason = validate_square_matrix(
             matrix,
             expected_size=size
         )
 
-        # 잘못된 행렬이면 오류
         if not ok:
 
             return (
@@ -1614,12 +1121,11 @@ def validate_filter_group(
                 None
             )
 
-        # 모든 값을 float로 변환해서 저장합니다.
+        # 모든 값을 float으로 변환하여 저장합니다.
         normalized[label] = to_float_matrix(
             matrix
         )
 
-    # 검증된 Cross/X 필터를 반환합니다.
     return True, "", normalized
 
 
@@ -1635,56 +1141,34 @@ def analyze_pattern_case(
     """
     JSON에 들어 있는 패턴 하나를 분석합니다.
 
-    하나의 case에 대해 다음 작업을 수행합니다.
+    한 케이스에 대해 다음을 수행합니다.
 
         1. 패턴 크기 확인
         2. expected 정답 확인
-        3. input 패턴 확인
+        3. 입력 패턴 확인
         4. Cross 필터 확인
         5. X 필터 확인
         6. Cross MAC 계산
         7. X MAC 계산
-        8. MAC 위치 수 계산
-        9. 판정
-       10. expected와 실제 판정 비교
-       11. 실제 패턴을 이용한 성능 측정
-
-
-    반환되는 dictionary에는 모든 결과가 들어갑니다.
+        8. 판정
+        9. 정답과 비교
+       10. 실제 패턴의 MAC 실행 시간 측정
     """
 
-    # --------------------------------------------------------
-    # 결과를 저장할 기본 dictionary
-    # --------------------------------------------------------
-    #
-    # 처음에는 실패 상태로 만들어 놓고,
-    # 모든 검사를 통과하면 PASS로 변경합니다.
+    # 분석 결과를 저장할 기본 구조입니다.
     result = {
         "case_id": case_id,
-
-        # 기본 상태
         "status": "FAIL",
-
-        # 오류 또는 결과 설명
         "reason": "",
-
-        # MAC 결과
         "cross_score": None,
         "x_score": None,
-
-        # 판정 결과
         "prediction": None,
-
-        # JSON에 저장된 정답
         "expected": None,
 
         # 성능 측정 결과
         "cross_time_ms": None,
         "x_time_ms": None,
         "average_time_ms": None,
-
-        # N²
-        "mac_position_count": None,
     }
 
     # --------------------------------------------------------
@@ -1695,11 +1179,6 @@ def analyze_pattern_case(
         case_id
     )
 
-    # 패턴 이름이
-    #
-    # size_5_0
-    #
-    # 같은 형식이 아니면 오류입니다.
     if size is None:
 
         result["reason"] = (
@@ -1725,7 +1204,6 @@ def analyze_pattern_case(
     # 3. 패턴 데이터 구조 확인
     # --------------------------------------------------------
 
-    # case_data는 dictionary여야 합니다.
     if not isinstance(case_data, dict):
 
         result["reason"] = (
@@ -1734,7 +1212,7 @@ def analyze_pattern_case(
 
         return result
 
-    # input이 반드시 필요합니다.
+    # input이 있어야 합니다.
     if "input" not in case_data:
 
         result["reason"] = (
@@ -1743,7 +1221,7 @@ def analyze_pattern_case(
 
         return result
 
-    # expected도 반드시 필요합니다.
+    # expected도 있어야 합니다.
     if "expected" not in case_data:
 
         result["reason"] = (
@@ -1756,19 +1234,10 @@ def analyze_pattern_case(
     # 4. 정답 라벨 확인
     # --------------------------------------------------------
 
-    # JSON의 expected를 표준 라벨로 변환합니다.
-    #
-    # 예:
-    #
-    # "+"
-    # "cross"
-    #
-    # → "Cross"
     expected = normalize_label(
         case_data["expected"]
     )
 
-    # 알 수 없는 라벨이면 오류
     if expected is None:
 
         result["reason"] = (
@@ -1778,17 +1247,15 @@ def analyze_pattern_case(
 
         return result
 
-    # 정상적인 expected를 결과에 저장합니다.
     result["expected"] = expected
 
     # --------------------------------------------------------
     # 5. 입력 패턴 확인
     # --------------------------------------------------------
 
-    # JSON에서 실제 입력 패턴을 가져옵니다.
     pattern = case_data["input"]
 
-    # 크기와 데이터가 정상인지 확인합니다.
+    # 패턴이 올바른 N×N 행렬인지 확인합니다.
     ok, reason = validate_square_matrix(
         pattern,
         expected_size=size
@@ -1802,7 +1269,7 @@ def analyze_pattern_case(
 
         return result
 
-    # 모든 값을 float로 변환합니다.
+    # 계산하기 편하도록 모든 값을 float으로 변환합니다.
     pattern = to_float_matrix(
         pattern
     )
@@ -1811,7 +1278,6 @@ def analyze_pattern_case(
     # 6. Cross / X 필터 확인
     # --------------------------------------------------------
 
-    # 해당 크기의 필터를 JSON에서 가져와 검증합니다.
     ok, reason, normalized_filters = (
         validate_filter_group(
             filters,
@@ -1819,7 +1285,6 @@ def analyze_pattern_case(
         )
     )
 
-    # 필터에 문제가 있으면 중단합니다.
     if not ok:
 
         result["reason"] = (
@@ -1828,7 +1293,7 @@ def analyze_pattern_case(
 
         return result
 
-    # 검증된 필터를 가져옵니다.
+    # 검증이 끝난 필터를 꺼냅니다.
     cross_filter = normalized_filters["Cross"]
     x_filter = normalized_filters["X"]
 
@@ -1851,31 +1316,9 @@ def analyze_pattern_case(
     )
 
     # --------------------------------------------------------
-    # 9. MAC 위치 수(N²)
-    # --------------------------------------------------------
-    #
-    # N×N 행렬에서 모든 위치를 검사하므로
-    #
-    #     N × N = N²
-    #
-    # 입니다.
-    #
-    # 예:
-    #
-    # 5x5   → 25
-    # 13x13 → 169
-    # 25x25 → 625
-    #
-    mac_position_count = size * size
-
-    # 결과 dictionary에 저장합니다.
-    result["mac_position_count"] = mac_position_count
-
-    # --------------------------------------------------------
-    # 10. 두 점수를 비교하여 판정
+    # 9. 두 점수를 비교하여 판정
     # --------------------------------------------------------
 
-    # Cross와 X 중 어느 쪽의 점수가 높은지 판단합니다.
     prediction = classify_scores(
         cross_score,
         x_score,
@@ -1884,29 +1327,25 @@ def analyze_pattern_case(
         epsilon=EPSILON
     )
 
-    # MAC 점수 저장
     result["cross_score"] = cross_score
     result["x_score"] = x_score
-
-    # 판정 결과 저장
     result["prediction"] = prediction
 
     # --------------------------------------------------------
-    # 11. 정답과 비교
+    # 10. 정답과 비교하여 PASS / FAIL 결정
     # --------------------------------------------------------
 
-    # 예측 결과가 JSON의 expected와 같은 경우
-    # 정상적으로 분류한 것입니다.
     if prediction == expected:
 
+        # 실제 판정과 정답이 같으면 성공입니다.
         result["status"] = "PASS"
         result["reason"] = "정상 판정"
 
     else:
 
+        # 정답과 다르면 실패입니다.
         result["status"] = "FAIL"
 
-        # 동점으로 인해 판정하지 못한 경우
         if prediction == "UNDECIDED":
 
             result["reason"] = (
@@ -1914,7 +1353,6 @@ def analyze_pattern_case(
                 f"|Cross-X| < {EPSILON}"
             )
 
-        # 명확하게 다른 결과가 나온 경우
         else:
 
             result["reason"] = (
@@ -1924,27 +1362,34 @@ def analyze_pattern_case(
             )
 
     # --------------------------------------------------------
-    # 12. 실제 입력 패턴으로 성능 측정
+    # 11. 실제 입력 패턴으로 성능 측정
     # --------------------------------------------------------
     #
-    # 중요:
+    # 여기서 매우 중요한 부분입니다.
     #
-    # 별도의 임의 테스트 패턴을 생성하지 않습니다.
+    # 성능 측정용으로 새로운 패턴을 만들지 않습니다.
     #
-    # JSON에 저장되어 있는 실제 input 패턴을 그대로
-    # 성능 측정에 사용합니다.
+    # JSON의 실제 input:
     #
-    # 따라서 성능 결과는 실제 데이터에 대한 MAC 실행 시간입니다.
+    #     case_data["input"]
+    #
+    # 을 그대로 사용합니다.
+    #
+    # 따라서
+    #
+    #     실제 분류에 사용한 패턴
+    #              =
+    #     성능 측정에 사용한 패턴
+    #
+    # 입니다.
 
-    # Cross 필터의 평균 MAC 시간
-    cross_time_ms, cross_mac_result = measure_mac(
+    cross_time_ms, _ = measure_mac(
         pattern,
         cross_filter,
         PERFORMANCE_REPEATS
     )
 
-    # X 필터의 평균 MAC 시간
-    x_time_ms, x_mac_result = measure_mac(
+    x_time_ms, _ = measure_mac(
         pattern,
         x_filter,
         PERFORMANCE_REPEATS
@@ -1956,25 +1401,10 @@ def analyze_pattern_case(
         + x_time_ms
     ) / 2.0
 
-    # 성능 결과 저장
+    # 결과에 성능 정보를 저장합니다.
     result["cross_time_ms"] = cross_time_ms
     result["x_time_ms"] = x_time_ms
     result["average_time_ms"] = average_time_ms
-
-    # --------------------------------------------------------
-    # MAC 결과 확인
-    # --------------------------------------------------------
-    #
-    # 아래 두 값은 일반적으로 동일해야 합니다.
-    #
-    # cross_score == cross_mac_result
-    # x_score     == x_mac_result
-    #
-    # 왜냐하면 같은 pattern과 filter로
-    # 같은 MAC 연산을 수행했기 때문입니다.
-    #
-    # 여기서는 별도의 비교 코드는 넣지 않고
-    # 참고용으로 값을 받아두었습니다.
 
     return result
 
@@ -1987,27 +1417,27 @@ def run_json_mode(
     json_path: str = "data.json"
 ) -> None:
     """
-    JSON 파일을 읽어서 모든 패턴을 차례대로 분석합니다.
+    data.json을 읽어서 모든 패턴을 차례대로 분석합니다.
 
-    전체 실행 흐름:
+    각 패턴에 대해:
 
-        JSON 파일 확인
-            ↓
         JSON 읽기
-            ↓
-        filters 확인
-            ↓
-        patterns 확인
-            ↓
-        각 패턴 분석
-            ↓
-        MAC 결과 출력
-            ↓
-        성능 결과 출력
-            ↓
-        PASS / FAIL 집계
-            ↓
-        최종 요약
+          ↓
+        패턴 검증
+          ↓
+        필터 검증
+          ↓
+        Cross MAC
+          ↓
+        X MAC
+          ↓
+        판정
+          ↓
+        정답 비교
+          ↓
+        실제 패턴 성능 측정
+
+    순서로 진행됩니다.
     """
 
     # --------------------------------------------------------
@@ -2018,7 +1448,7 @@ def run_json_mode(
     print("# [1] JSON 데이터 로드")
     print("#---------------------------------------")
 
-    # 파일이 실제로 존재하는지 확인합니다.
+    # 파일이 존재하는지 먼저 확인합니다.
     if not os.path.exists(json_path):
 
         print(
@@ -2027,30 +1457,30 @@ def run_json_mode(
 
         return
 
-    # JSON을 읽어옵니다.
     try:
 
+        # JSON 파일을 읽습니다.
         data = load_json_file(
             json_path
         )
 
-    # JSON 문법 자체가 잘못된 경우
     except json.JSONDecodeError as error:
 
+        # JSON 문법이 잘못된 경우
         print("JSON 파싱 오류:")
         print(error)
 
         return
 
-    # 파일을 읽을 수 없는 경우
     except OSError as error:
 
+        # 파일을 읽을 수 없는 경우
         print("파일 읽기 오류:")
         print(error)
 
         return
 
-    # JSON 최상위 구조가 dictionary인지 확인합니다.
+    # JSON 최상위는 객체여야 합니다.
     if not isinstance(data, dict):
 
         print(
@@ -2060,7 +1490,7 @@ def run_json_mode(
 
         return
 
-    # filters와 patterns를 가져옵니다.
+    # JSON에서 filters와 patterns를 가져옵니다.
     filters = data.get(
         "filters"
     )
@@ -2069,7 +1499,7 @@ def run_json_mode(
         "patterns"
     )
 
-    # filters가 dictionary인지 확인
+    # filters가 있는지 확인합니다.
     if not isinstance(filters, dict):
 
         print(
@@ -2078,7 +1508,7 @@ def run_json_mode(
 
         return
 
-    # patterns가 dictionary인지 확인
+    # patterns가 있는지 확인합니다.
     if not isinstance(patterns, dict):
 
         print(
@@ -2095,10 +1525,9 @@ def run_json_mode(
     print("# [2] 필터 로드")
     print("#---------------------------------------")
 
-    # 정상적으로 로드된 크기를 저장합니다.
     valid_filter_sizes = []
 
-    # 지원하는 5, 13, 25 크기를 하나씩 확인합니다.
+    # 지원하는 크기를 하나씩 확인합니다.
     for size in SUPPORTED_JSON_SIZES:
 
         ok, reason, normalized_filters = (
@@ -2108,9 +1537,9 @@ def run_json_mode(
             )
         )
 
-        # 정상적으로 로드된 경우
         if ok:
 
+            # 정상적으로 사용할 수 있는 크기를 저장합니다.
             valid_filter_sizes.append(
                 size
             )
@@ -2120,7 +1549,6 @@ def run_json_mode(
                 f"필터 로드 완료 (Cross, X)"
             )
 
-        # 오류가 있는 경우
         else:
 
             print(
@@ -2139,45 +1567,35 @@ def run_json_mode(
     # 전체 패턴 개수
     total = 0
 
-    # PASS 개수
+    # 정답을 맞힌 개수
     passed = 0
 
-    # FAIL 개수
+    # 정답을 틀린 개수
     failed = 0
 
-    # 실패한 케이스의 상세 내용을 저장합니다.
+    # 실패한 케이스를 저장합니다.
     failures = []
 
-    # 성능 측정을 완료한 결과를 저장합니다.
+    # 성능 측정이 완료된 결과를 저장합니다.
     performance_results = []
 
-    # patterns dictionary의 모든 항목을 하나씩 분석합니다.
-    #
-    # 예:
-    #
-    # "size_5_0": {...}
-    # "size_5_1": {...}
-    # "size_13_0": {...}
-    #
-    # 순서대로 처리합니다.
+    # JSON에 들어 있는 모든 패턴을 하나씩 처리합니다.
     for case_id, case_data in patterns.items():
 
-        # 전체 테스트 개수 증가
         total += 1
 
-        # 현재 케이스 분석
+        # 패턴 하나를 분석합니다.
         result = analyze_pattern_case(
             case_id,
             case_data,
             filters
         )
 
-        # PASS인지 확인
+        # PASS인지 FAIL인지 확인합니다.
         if result["status"] == "PASS":
 
             passed += 1
 
-        # FAIL이면 실패 목록에 추가
         else:
 
             failed += 1
@@ -2187,42 +1605,25 @@ def run_json_mode(
             )
 
         # ----------------------------------------------------
-        # 현재 패턴 결과 출력
+        # 현재 패턴의 결과 출력
         # ----------------------------------------------------
 
         print(
             f"\n--- {case_id} ---"
         )
 
-        # MAC 계산까지 정상적으로 수행되었는지 확인합니다.
+        # MAC 계산까지 정상적으로 끝난 경우
         if result["cross_score"] is not None:
 
-            # ------------------------------------------------
-            # MAC 결과
-            # ------------------------------------------------
-
             print(
-                f"Cross MAC 결과: "
+                f"Cross 점수: "
                 f"{result['cross_score']:.10f}"
             )
 
             print(
-                f"X MAC 결과: "
+                f"X 점수: "
                 f"{result['x_score']:.10f}"
             )
-
-            # ------------------------------------------------
-            # MAC 위치 수
-            # ------------------------------------------------
-
-            print(
-                f"MAC 위치 수(N²): "
-                f"{result['mac_position_count']}"
-            )
-
-            # ------------------------------------------------
-            # 판정
-            # ------------------------------------------------
 
             print(
                 f"판정: {result['prediction']} | "
@@ -2230,7 +1631,7 @@ def run_json_mode(
                 f"{result['status']}"
             )
 
-            # FAIL인 경우 원인을 출력합니다.
+            # 실패한 경우 왜 실패했는지 출력합니다.
             if result["status"] == "FAIL":
 
                 print(
@@ -2238,10 +1639,9 @@ def run_json_mode(
                 )
 
             # ------------------------------------------------
-            # 성능 측정 결과
+            # 성능 측정 결과 출력
             # ------------------------------------------------
 
-            # 성능 측정이 정상적으로 끝났는지 확인
             if result["cross_time_ms"] is not None:
 
                 print(
@@ -2259,14 +1659,14 @@ def run_json_mode(
                     f"{result['average_time_ms']:.6f} ms"
                 )
 
-                # 전체 성능 결과 목록에도 저장합니다.
+                # 나중에 전체 성능 결과를 출력하기 위해 저장합니다.
                 performance_results.append(
                     result
                 )
 
         else:
 
-            # MAC 계산 자체가 불가능한 경우
+            # MAC 계산 자체가 불가능했던 경우
             print(
                 f"판정: FAIL | "
                 f"원인: {result['reason']}"
@@ -2280,7 +1680,6 @@ def run_json_mode(
     print("# [4] 실제 입력 패턴 성능 분석")
     print("#---------------------------------------")
 
-    # 별도의 테스트 패턴을 만들지 않는다는 것을 명시합니다.
     print(
         "※ 별도의 1.0 테스트 패턴을 생성하지 않습니다."
     )
@@ -2291,8 +1690,7 @@ def run_json_mode(
 
     print()
 
-    # 성능 측정이 완료된 패턴이 하나 이상 있다면
-    # 표 형태로 출력합니다.
+    # 성능 측정이 성공한 패턴이 있는 경우
     if performance_results:
 
         print(
@@ -2301,35 +1699,30 @@ def run_json_mode(
             f"{'Cross(ms)':>15}"
             f"{'X(ms)':>15}"
             f"{'평균(ms)':>15}"
-            f"{'MAC 위치 수(N²)':>20}"
         )
 
-        print("-" * 95)
+        print("-" * 75)
 
-        # 성능 결과를 하나씩 출력합니다.
+        # 각 패턴의 성능을 출력합니다.
         for result in performance_results:
 
-            # 패턴 ID
             case_id = result["case_id"]
 
-            # 패턴 크기
+            # 패턴 이름에서 크기를 가져옵니다.
             size = extract_size_from_pattern_key(
                 case_id
             )
 
-            # 한 줄 출력
             print(
                 f"{case_id:<18}"
                 f"{str(size) + 'x' + str(size):<10}"
                 f"{result['cross_time_ms']:>15.6f}"
                 f"{result['x_time_ms']:>15.6f}"
                 f"{result['average_time_ms']:>15.6f}"
-                f"{result['mac_position_count']:>20}"
             )
 
     else:
 
-        # 정상적으로 성능 측정할 패턴이 하나도 없을 경우
         print(
             "성능 측정을 완료할 수 있는 "
             "정상 패턴이 없습니다."
@@ -2343,27 +1736,23 @@ def run_json_mode(
     print("# [5] 결과 요약")
     print("#---------------------------------------")
 
-    # 전체 테스트 개수
     print(
         f"총 테스트: {total}개"
     )
 
-    # PASS 개수
     print(
         f"통과: {passed}개"
     )
 
-    # FAIL 개수
     print(
         f"실패: {failed}개"
     )
 
-    # 실패 케이스가 있는 경우
+    # 실패한 테스트가 있다면 목록을 출력합니다.
     if failures:
 
         print("\n실패 케이스:")
 
-        # 실패한 케이스를 하나씩 출력합니다.
         for failure in failures:
 
             print(
@@ -2371,7 +1760,6 @@ def run_json_mode(
                 f"{failure['reason']}"
             )
 
-    # 실패가 없는 경우
     else:
 
         print(
@@ -2402,30 +1790,26 @@ def print_title() -> None:
 
 def main() -> None:
     """
-    프로그램의 실제 시작점입니다.
+    프로그램의 시작점입니다.
 
-    사용자가 메뉴에서
+    사용자에게 다음 메뉴를 보여줍니다.
 
-        1 → 사용자 입력
-        2 → JSON 분석
-        0 → 종료
-
-    중 하나를 선택합니다.
+        1 → 직접 행렬 입력
+        2 → data.json 분석
+        0 → 프로그램 종료
     """
 
     # 프로그램 제목 출력
     print_title()
 
-    # 사용자가 올바른 메뉴를 선택할 때까지 반복합니다.
+    # 사용자가 종료할 때까지 메뉴를 반복합니다.
     while True:
 
-        # 메뉴 출력
         print("\n[모드 선택]")
         print("1. 사용자 입력 (3x3)")
         print("2. data.json 분석")
         print("0. 종료")
 
-        # 사용자 선택 입력
         choice = input(
             "선택: "
         ).strip()
@@ -2436,10 +1820,9 @@ def main() -> None:
 
         if choice == "1":
 
-            # 3x3 필터와 패턴을 직접 입력받아 실행합니다.
             run_user_mode()
 
-            # 프로그램 종료
+            # 작업이 끝나면 프로그램 종료
             break
 
         # ----------------------------------------------------
@@ -2454,18 +1837,18 @@ def main() -> None:
                 "(기본값: data.json): "
             ).strip()
 
-            # 아무것도 입력하지 않았다면
+            # 아무것도 입력하지 않으면
             # 기본 파일 이름을 사용합니다.
             if not json_path:
 
                 json_path = "data.json"
 
-            # JSON 분석 실행
+            # JSON 분석 시작
             run_json_mode(
                 json_path
             )
 
-            # 프로그램 종료
+            # 작업이 끝나면 프로그램 종료
             break
 
         # ----------------------------------------------------
@@ -2496,27 +1879,11 @@ def main() -> None:
 # 프로그램 실행
 # ============================================================
 #
-# Python 파일을 직접 실행했을 때만 main()을 실행합니다.
+# 이 파일을 직접 실행했을 때만 main()을 실행합니다.
 #
-# 예:
-#
-#     python npu_simulator.py
-#
-# → __name__ == "__main__"
-#
-# 따라서 main() 실행
-#
-#
-# 반대로 이 파일을 다른 Python 파일에서 import하면
-#
-#     __name__ == "npu_simulator"
-#
-# 가 되므로 자동으로 main()이 실행되지 않습니다.
-#
-# 이것은 Python에서 매우 일반적으로 사용하는
-# "직접 실행 여부 확인" 패턴입니다.
+# 다른 Python 파일에서 이 파일을 import하면
+# main()이 자동으로 실행되지 않습니다.
 # ============================================================
 
 if __name__ == "__main__":
     main()
-
